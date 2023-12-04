@@ -1,0 +1,9 @@
+interval: 2h
+offset: 1977-05-25T11:00:00-07:00
+pidFile: run/pid
+ranFile: run/ran
+ipServiceURL: http://localhost:45782/ip
+ipCacheFile: run/ip
+ipMessageFormat: "%s:2456"
+discordBotToken: 1234
+discordDefaultChannelName: valheim
