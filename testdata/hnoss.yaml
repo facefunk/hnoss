@@ -7,3 +7,4 @@ ipCacheFile: run/ip
 ipMessageFormat: "%s:2456"
 discordBotToken: 1234
 discordDefaultChannelName: valheim
+logFile: run/log

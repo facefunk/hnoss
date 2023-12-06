@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/syslog"
 	"net/netip"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -15,7 +17,7 @@ type (
 	// Hnoss is the main application object, configurable by dependency injection.
 	Hnoss struct {
 		config           *Config
-		logger           *log.Logger
+		logger           Printer
 		ranAdapter       TimeAdapter
 		ipServiceAdapter IPServiceAdapter
 		ipCacheAdapter   IPAdapter
@@ -52,12 +54,16 @@ type (
 	NowAdapter interface {
 		Now() time.Time
 	}
+	// Printer should log via the Print method.
+	Printer interface {
+		Print(v ...any)
+	}
 )
 
 var maxTime = time.Unix(1<<63-62135596801, 999999999)
 var zeroTime = time.Time{}
 
-func New(conf *Config, logger *log.Logger, ranAdapter TimeAdapter, ipServiceAdapter IPServiceAdapter,
+func New(conf *Config, logger Printer, ranAdapter TimeAdapter, ipServiceAdapter IPServiceAdapter,
 	ipCacheAdapter IPAdapter, chatAdapter ChatAdapter, nowAdapter NowAdapter) *Hnoss {
 	h := &Hnoss{
 		config:           conf,
@@ -254,4 +260,40 @@ func Lock(pidFile string) (func() error, error) {
 		}
 		return nil
 	}, nil
+}
+
+func NewLogger(path string) (Printer, func() error, error) {
+	switch path {
+	case "":
+		return log.Default(), nil, nil
+	case "syslog":
+		logger, err := syslog.NewLogger(syslog.LOG_SYSLOG, log.LstdFlags)
+		if err != nil {
+			return nil, nil, FatalWrap(err, "failed to create syslog logger")
+		}
+		return logger, nil, nil
+	default:
+		err := mkDir(path, "log")
+		if err != nil {
+			return nil, nil, (*Fatal)(err.(*Error))
+		}
+		file, err := os.OpenFile(path, os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
+		if err != nil {
+			return nil, nil, FatalWrap(err, "failed to open log file")
+		}
+		closeFile := closeFileFunc(path, "log", &err, file)
+		return log.New(file, "", log.LstdFlags), func() error {
+			closeFile()
+			return err
+		}, nil
+	}
+}
+
+func PanicOnError(f func() error) {
+	if f == nil {
+		return
+	}
+	if err := f(); err != nil {
+		panic(err)
+	}
 }

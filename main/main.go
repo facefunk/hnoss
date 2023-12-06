@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -10,10 +9,9 @@ import (
 	"github.com/facefunk/hnoss"
 )
 
-const defaultConfigFile = "./hnoss.yaml"
+const defaultConfigFile = "/etc/hnoss.yaml"
 
 func main() {
-	logger := log.Default()
 
 	configFile := defaultConfigFile
 	if len(os.Args) > 1 {
@@ -21,21 +19,20 @@ func main() {
 	}
 	conf, err := hnoss.ConfigureFromFile(configFile)
 	if err != nil {
-		logger.Print(err)
-		return
+		panic(err)
 	}
 
 	unlock, err := hnoss.Lock(conf.PIDFile)
 	if err != nil {
-		logger.Print(err)
-		return
+		panic(err)
 	}
-	defer func() {
-		if err = unlock(); err != nil {
-			logger.Print(err)
-			return
-		}
-	}()
+	defer hnoss.PanicOnError(unlock)
+
+	logger, closeLogFile, err := hnoss.NewLogger(conf.LogFile)
+	if err != nil {
+		panic(err)
+	}
+	defer hnoss.PanicOnError(closeLogFile)
 
 	// stop does cancel, but also deconstructs.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

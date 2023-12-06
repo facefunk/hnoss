@@ -25,6 +25,7 @@ func TestConfig(t *testing.T) {
 		IPMessageFormat:           "%s:2456",
 		DiscordBotToken:           "1234",
 		DiscordDefaultChannelName: "valheim",
+		LogFile:                   "run/log",
 	}
 
 	assert.Equal(t, expected, conf)

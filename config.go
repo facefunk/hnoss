@@ -20,6 +20,7 @@ type (
 		IPMessageFormat           string
 		DiscordBotToken           string
 		DiscordDefaultChannelName string
+		LogFile                   string
 	}
 	yamlConfig struct {
 		Interval                  string `yaml:"interval"`
@@ -31,6 +32,7 @@ type (
 		IPMessageFormat           string `yaml:"ipMessageFormat"`
 		DiscordBotToken           string `yaml:"discordBotToken"`
 		DiscordDefaultChannelName string `yaml:"discordDefaultChannelName"`
+		LogFile                   string `yaml:"logFile"`
 	}
 )
 
@@ -61,6 +63,7 @@ func (c *Config) Set(y *yamlConfig) error {
 	c.IPMessageFormat = y.IPMessageFormat
 	c.DiscordBotToken = y.DiscordBotToken
 	c.DiscordDefaultChannelName = y.DiscordDefaultChannelName
+	c.LogFile = y.LogFile
 	return nil
 }
 
@@ -82,6 +85,7 @@ func defaultYAMLConfig() *yamlConfig {
 		RanFile:         "/var/cache/hnoss/ran",
 		IPCacheFile:     "/var/cache/hnoss/ip",
 		IPMessageFormat: "%s",
+		LogFile:         "/var/log/hnoss.log",
 	}
 }
 
