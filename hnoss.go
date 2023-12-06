@@ -98,8 +98,6 @@ func (h *Hnoss) Start(ctx context.Context) {
 		stopTimer(timer)
 		timer.Reset(time.Until(next))
 
-		h.logger.Print(Infof("next scheduled run: %s", next.String()))
-
 		select {
 		case <-timer.C:
 			h.run(next, wasAdvanced, "")
@@ -133,7 +131,6 @@ func stopTimer(timer *time.Timer) {
 
 // Get the ip address and post it, if necessary.
 func (h *Hnoss) run(t time.Time, cached bool, chanID string) {
-	h.logger.Print(NewInfo("running"))
 	var err error
 	// Call Listen again each run to make sure we're connected.
 	if err = h.chatAdapter.Listen(); err != nil {
@@ -159,7 +156,9 @@ func (h *Hnoss) run(t time.Time, cached bool, chanID string) {
 		if err = h.chatAdapter.Post(chanID, fmt.Sprintf(h.config.IPMessageFormat, ip.String())); err != nil {
 			h.logger.Print(err)
 		}
+		return
 	}
+	h.logger.Print(NewInfo("ip address unchanged"))
 }
 
 // Get the next run time.
