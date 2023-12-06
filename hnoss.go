@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/netip"
+	"path/filepath"
 	"time"
 
 	"github.com/nightlyone/lockfile"
@@ -230,11 +231,15 @@ func (h *Hnoss) getIP(t time.Time, cached bool) (netip.Addr, error) {
 }
 
 func Lock(pidFile string) (func() error, error) {
-	err := mkDir(pidFile, "lock")
+	p, err := filepath.Abs(pidFile)
 	if err != nil {
-		return nil, FatalWrap(err, "failed to create lock dir")
+		return nil, FatalWrapf(err, "failed to get absolute path for PIDFile: %s", pidFile)
 	}
-	lock, err := lockfile.New(pidFile)
+	err = mkDir(p, "lock")
+	if err != nil {
+		return nil, (*Fatal)(err.(*Error))
+	}
+	lock, err := lockfile.New(p)
 	if err != nil {
 		return nil, FatalWrap(err, "failed to init lock")
 	}

@@ -53,16 +53,20 @@ func Infof(format string, args ...any) *Info {
 	return &Info{errors.Errorf(format, args...)}
 }
 
-func ErrorWrap(err error, format string) *Error {
-	return &Error{errors.Wrap(err, format)}
+func ErrorWrap(err error, message string) *Error {
+	return &Error{errors.Wrap(err, message)}
 }
 
-func FatalWrap(err error, format string) *Fatal {
-	return &Fatal{errors.Wrap(err, format)}
+func FatalWrap(err error, message string) *Fatal {
+	return &Fatal{errors.Wrap(err, message)}
 }
 
 func ErrorWrapf(err error, format string, args ...any) *Error {
 	return &Error{errors.Wrapf(err, format, args...)}
+}
+
+func FatalWrapf(err error, format string, args ...any) *Fatal {
+	return &Fatal{errors.Wrapf(err, format, args...)}
 }
 
 func multiError(existErr *error, newErr error) bool {

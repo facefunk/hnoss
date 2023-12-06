@@ -53,11 +53,8 @@ func (c *Config) Set(y *yamlConfig) error {
 	if err != nil {
 		return ErrorWrapf(err, "config: failed to parse offset: %s", y.Offset)
 	}
-	c.PIDFile, err = filepath.Abs(y.PIDFile)
-	if err != nil {
-		return ErrorWrapf(err, "config: failed to get absolute path for PIDFile: %s", y.PIDFile)
-	}
 
+	c.PIDFile = y.PIDFile
 	c.RanFile = y.RanFile
 	c.IPServiceURL = y.IPServiceURL
 	c.IPCacheFile = y.IPCacheFile
