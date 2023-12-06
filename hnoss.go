@@ -114,6 +114,9 @@ func (h *Hnoss) Start(ctx context.Context) {
 			stopTimer(timer)
 			return
 		}
+		// Throttle. We're using RFC3339 dates that have a max precision of 1 second, so waiting for 1 second will
+		// ensure we don't run twice for the same time.
+		time.Sleep(time.Second)
 	}
 }
 
