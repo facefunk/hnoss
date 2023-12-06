@@ -207,20 +207,16 @@ func TestGetIP(t *testing.T) {
 	_, err = h.getIP(r, false)
 	assert.Error(t, err)
 
+	ipCache.err = nil
 	ipCache.ip, err = netip.ParseAddr("0.0.0.0")
 	require.NoError(t, err)
-	ipCache.err = nil
 	ip, err := h.getIP(r, true)
 	assert.NoError(t, err)
 	assert.Equal(t, ipCache.ip, ip)
 
-	ip, err = h.getIP(r, false)
-	assert.NoError(t, err)
-	assert.Equal(t, ipCache.ip, ip)
-
+	ipService.err = nil
 	ipService.ip, err = netip.ParseAddr("1.2.3.4")
 	require.NoError(t, err)
-	ipService.err = nil
 	ip, err = h.getIP(r, false)
 	assert.NoError(t, err)
 	assert.Equal(t, ipService.ip, ip)

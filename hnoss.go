@@ -212,10 +212,10 @@ func (h *Hnoss) getIP(t time.Time, cached bool) (netip.Addr, error) {
 		if err != nil {
 			return h.ip, err
 		}
-		if err = h.ipCacheAdapter.Put(h.ip); err != nil {
+		h.ip = ip
+		if err = h.ipCacheAdapter.Put(ip); err != nil {
 			h.logger.Print(err)
 		}
-		h.ip = ip
 		h.ran = t
 		if err = h.ranAdapter.Put(t); err != nil {
 			h.logger.Print(err)
