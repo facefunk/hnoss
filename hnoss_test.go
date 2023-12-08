@@ -216,3 +216,37 @@ func newIP(t *testing.T, s string) netip.Addr {
 	require.NoError(t, err)
 	return ip
 }
+
+func TestLock(t *testing.T) {
+	unlock, err := Lock("run/pid")
+	require.NoError(t, err)
+	err = unlock()
+	assert.NoError(t, err)
+}
+
+func TestNewLogger(t *testing.T) {
+	_, _, err := NewLogger("")
+	assert.NoError(t, err)
+	_, _, err = NewLogger("syslog")
+	assert.NoError(t, err)
+	_, closeLogFile, err := NewLogger("run/log")
+	assert.NoError(t, err)
+	err = closeLogFile()
+	assert.NoError(t, err)
+}
+
+func TestPanicOnError(t *testing.T) {
+	defer func() {
+		a := recover()
+		_, ok := a.(*Error)
+		assert.True(t, ok)
+	}()
+	PanicOnError(nil)
+	PanicOnError(func() error {
+		return nil
+	})
+	PanicOnError(func() error {
+		return NewError("An error")
+	})
+	assert.Fail(t, "didn't panic")
+}
