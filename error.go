@@ -2,72 +2,9 @@ package hnoss
 
 import (
 	gerrs "errors"
-	"fmt"
-
-	"github.com/pkg/errors"
 )
 
-const (
-	InfoTitle  = "INFO"
-	WarnTitle  = "WARN"
-	ErrorTitle = "ERROR"
-	FatalTitle = "FATAL"
-)
-
-type (
-	Info struct {
-		error
-	}
-	Warn struct {
-		error
-	}
-	Error struct {
-		error
-	}
-	Fatal struct {
-		error
-	}
-)
-
-func (s *Info) Error() string {
-	return fmt.Sprintf("%s: %s", InfoTitle, s.error.Error())
-}
-
-func (s *Warn) Error() string {
-	return fmt.Sprintf("%s: %s", WarnTitle, s.error.Error())
-}
-
-func (s *Error) Error() string {
-	return fmt.Sprintf("%s: %s", ErrorTitle, s.error.Error())
-}
-
-func (s *Fatal) Error() string {
-	return fmt.Sprintf("%s: %s", FatalTitle, s.error.Error())
-}
-
-func NewInfo(message string) *Info {
-	return &Info{errors.New(message)}
-}
-
-func Infof(format string, args ...any) *Info {
-	return &Info{errors.Errorf(format, args...)}
-}
-
-func ErrorWrap(err error, message string) *Error {
-	return &Error{errors.Wrap(err, message)}
-}
-
-func FatalWrap(err error, message string) *Fatal {
-	return &Fatal{errors.Wrap(err, message)}
-}
-
-func ErrorWrapf(err error, format string, args ...any) *Error {
-	return &Error{errors.Wrapf(err, format, args...)}
-}
-
-func FatalWrapf(err error, format string, args ...any) *Fatal {
-	return &Fatal{errors.Wrapf(err, format, args...)}
-}
+//go:generate go run gen.go
 
 func multiError(existErr *error, newErr error) bool {
 	if newErr == nil {

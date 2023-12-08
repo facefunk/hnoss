@@ -1,0 +1,41 @@
+// Generated on {{ .Timestamp }} by gen.go
+package hnoss
+
+import (
+	"fmt"
+
+	"github.com/pkg/errors"
+)
+
+type (
+{{- range .Types }}
+    {{ .Name }} struct {
+        error
+    }
+{{- end }}
+)
+{{ range .Types }}
+func (s *{{ .Name }}) Error() string {
+	return fmt.Sprintf("{{ .Output }}: %s", s.error.Error())
+}
+
+func (s *{{ .Name }}) Unwrap() error {
+	return s.error
+}
+
+func New{{ .Name }}(message string) *{{ .Name }} {
+	return &{{ .Name }}{errors.New(message)}
+}
+
+func {{ .Name }}f(format string, args ...any) *{{ .Name }} {
+	return &{{ .Name }}{errors.Errorf(format, args...)}
+}
+
+func {{ .Name }}Wrap(err error, message string) *{{ .Name }} {
+	return &{{ .Name }}{errors.Wrap(err, message)}
+}
+
+func {{ .Name }}Wrapf(err error, format string, args ...any) *{{ .Name }} {
+	return &{{ .Name }}{errors.Wrapf(err, format, args...)}
+}
+{{ end -}}

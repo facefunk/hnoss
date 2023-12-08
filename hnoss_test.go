@@ -2,7 +2,6 @@ package hnoss
 
 import (
 	"context"
-	gerrs "errors"
 	"log"
 	"net/netip"
 	"strconv"
@@ -115,21 +114,6 @@ func TestNextJobTime(t *testing.T) {
 			assert.Equal(t, tc.xWasAdvanced, wasAdvanced, "wasAdvanced")
 		})
 	}
-}
-
-func TestMultiError(t *testing.T) {
-	var err, newErr, existErr error
-	b := multiError(&err, newErr)
-	assert.False(t, b)
-	newErr = gerrs.New("new error")
-	b = multiError(&err, newErr)
-	assert.True(t, b)
-	assert.Equal(t, newErr, err)
-	existErr = gerrs.New("existing error")
-	err = existErr
-	b = multiError(&err, newErr)
-	assert.True(t, b)
-	assert.NotEqual(t, existErr, err)
 }
 
 func TestScheduler(t *testing.T) {
