@@ -9,26 +9,25 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 type (
 	mockTimeAdaptor struct {
-		time, putTime time.Time
-		err           error
+		time time.Time
+		err  error
+		fun  func()
 	}
 	mockIPAdaptor struct {
 		ip, putIP netip.Addr
 		err       error
+		called    bool
 	}
 	mockChatAdaptor struct {
 		c                   chan string
 		postChanID, postMsg string
-	}
-	mockNowAdapter struct {
-		now time.Time
+		err                 error
 	}
 )
 
@@ -37,11 +36,14 @@ func (m *mockTimeAdaptor) Get() (time.Time, error) {
 }
 
 func (m *mockTimeAdaptor) Put(t time.Time) error {
-	m.putTime = t
+	if m.fun != nil {
+		m.fun()
+	}
 	return nil
 }
 
 func (m *mockIPAdaptor) Get() (netip.Addr, error) {
+	m.called = true
 	return m.ip, m.err
 }
 
@@ -55,7 +57,7 @@ func (m *mockChatAdaptor) Chan() <-chan string {
 }
 
 func (m *mockChatAdaptor) Listen() error {
-	return nil
+	return m.err
 }
 
 func (m *mockChatAdaptor) Close() error {
@@ -68,46 +70,43 @@ func (m *mockChatAdaptor) Post(chanId, msg string) error {
 	return nil
 }
 
-func (m *mockNowAdapter) Now() time.Time {
-	return m.now
-}
-
 var nextRunTimeTestCases = []struct {
 	description                      string
 	nowS, offsetS, intervalS, xNextS string
 	xRunNow, xWasAdvanced            bool
+	err                              error
 }{
+	{"RanNotFound", "2023-11-28T14:00:00Z", "2023-11-27T14:05:00Z", "1h",
+		"2023-11-28T14:05:00Z", true, false, NewError("An error")},
 	{"Regular", "2023-11-28T14:00:00Z", "2023-11-27T14:05:00Z", "1h",
-		"2023-11-28T14:05:00Z", false, false},
+		"2023-11-28T14:05:00Z", false, false, nil},
 	{"Now", "2023-11-28T14:05:00Z", "2023-11-27T14:05:00Z", "1h",
-		"2023-11-28T15:05:00Z", true, false},
+		"2023-11-28T15:05:00Z", true, false, nil},
 	{"Missed", "2023-11-28T14:00:00Z", "2023-11-27T14:06:00Z", "1h",
-		"2023-11-28T14:06:00Z", true, false},
+		"2023-11-28T14:06:00Z", true, false, nil},
 	{"Advanced", "2023-11-28T14:00:00Z", "2023-11-27T14:04:00Z", "1h",
-		"2023-11-28T15:04:00Z", false, true},
+		"2023-11-28T15:04:00Z", false, true, nil},
 	{"Long", "2023-05-12T14:00:00Z", "1977-05-25T11:00:00-07:00",
-		strconv.Itoa(365*24) + "h", "2024-05-13T18:00:00Z", false, true},
+		strconv.Itoa(365*24) + "h", "2024-05-13T18:00:00Z", false, true, nil},
+	{"Nano", "2023-11-28T14:00:00.1Z", "2023-11-27T14:05:00Z", "1h",
+		"2023-11-28T14:05:00Z", false, false, nil},
 }
 
-func TestNextJobTime(t *testing.T) {
-	conf := DefaultConfig()
+func TestNext(t *testing.T) {
 	logger := log.Default()
 	r, err := time.Parse(time.RFC3339, "2023-11-28T13:05:00Z")
 	require.NoError(t, err)
 	ran := &mockTimeAdaptor{time: r}
-	h := New(conf, logger, ran, nil, nil, nil, nil)
+	h := New(nil, logger, ran, nil, nil, nil, nil)
 
 	for _, tc := range nextRunTimeTestCases {
 		t.Run(tc.description, func(t *testing.T) {
-			now, err := time.Parse(time.RFC3339, tc.nowS)
-			require.NoError(t, err)
-			offset, err := time.Parse(time.RFC3339, tc.offsetS)
-			require.NoError(t, err)
+			now := newTime(t, tc.nowS)
+			offset := newTime(t, tc.offsetS)
+			xNext := newTime(t, tc.xNextS)
 			interval, err := time.ParseDuration(tc.intervalS)
 			require.NoError(t, err)
-			xNext, err := time.Parse(time.RFC3339, tc.xNextS)
-			require.NoError(t, err)
-
+			ran.err = tc.err
 			next, jobNow, wasAdvanced := h.next(now, offset, interval)
 			assert.Equal(t, tc.xRunNow, jobNow, "jobNow")
 			assert.Equal(t, xNext, next, "next")
@@ -125,85 +124,95 @@ func TestScheduler(t *testing.T) {
 	conf := &Config{}
 	err := conf.Set(&y)
 	require.NoError(t, err)
+	conf.Offset = time.Now().UTC()
 
 	logger := log.Default()
-	ran := &mockTimeAdaptor{}
-
-	ip, err := netip.ParseAddr("0.0.0.0")
-	require.NoError(t, err)
-	ipService := &mockIPAdaptor{ip: ip}
-
-	ip, err = netip.ParseAddr("1.2.3.4")
-	require.NoError(t, err)
-	ipCache := &mockIPAdaptor{ip: ip}
-
+	wg := &sync.WaitGroup{}
+	ran := &mockTimeAdaptor{
+		time: conf.Offset,
+		fun: func() {
+			wg.Done()
+		},
+	}
+	ipService := &mockIPAdaptor{ip: newIP(t, "0.0.0.0")}
+	ipCache := &mockIPAdaptor{ip: newIP(t, "1.2.3.4")}
 	chat := &mockChatAdaptor{c: make(chan string)}
-
-	n, err := time.Parse(time.RFC3339Nano, "2023-11-28T00:00:00.1Z")
-	require.NoError(t, err)
-	now := &mockNowAdapter{now: n}
+	now := NewRealNowAdapter()
 
 	h := New(conf, logger, ran, ipService, ipCache, chat, now)
-
 	ctx, cancel := context.WithCancel(context.Background())
-
-	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		h.Start(ctx)
 		wg.Done()
 	}()
 
-	time.Sleep(500 * time.Millisecond)
-	now.now, err = time.Parse(time.RFC3339Nano, "2023-11-28T00:00:01Z")
-	require.NoError(t, err)
-	time.Sleep(500 * time.Millisecond)
+	wg.Wait()
+	wg.Add(1)
 
 	assert.Equal(t, "", chat.postChanID)
 	assert.Equal(t, "0.0.0.0", chat.postMsg)
 
 	chat.c <- "1234"
+	chat.err = NewWarn("A warning")
 
-	time.Sleep(time.Second)
+	wg.Wait()
+	wg.Add(1)
 
 	assert.Equal(t, "1234", chat.postChanID)
 	assert.Equal(t, "0.0.0.0", chat.postMsg)
+
+	ipService.called = false
+	ipCache.called = false
+	chat.err = NewError("An error")
+
+	wg.Wait()
+	wg.Add(1)
+
+	assert.False(t, ipService.called, "ipService")
+	assert.False(t, ipCache.called, "ipCache")
+
+	ran.fun = nil
 
 	cancel()
 	wg.Wait()
 }
 
 func TestGetIP(t *testing.T) {
-	e := errors.New("An error")
-	r, err := time.Parse(time.RFC3339, "2023-11-28T13:05:00Z")
-	require.NoError(t, err)
+	e := NewError("An error")
 
-	conf := DefaultConfig()
-	logger := log.Default()
-	ran := &mockTimeAdaptor{}
 	ipService := &mockIPAdaptor{err: e}
 	ipCache := &mockIPAdaptor{err: e}
-	h := New(conf, logger, ran, ipService, ipCache, nil, nil)
+	h := New(nil, nil, nil, ipService, ipCache, nil, nil)
 
-	_, err = h.getIP(r, true)
+	_, err := h.getIP(true)
 	assert.Error(t, err)
 
-	_, err = h.getIP(r, false)
+	_, err = h.getIP(false)
 	assert.Error(t, err)
 
 	ipCache.err = nil
-	ipCache.ip, err = netip.ParseAddr("0.0.0.0")
-	require.NoError(t, err)
-	ip, err := h.getIP(r, true)
+	ipCache.ip = newIP(t, "0.0.0.0")
+	ip, err := h.getIP(true)
 	assert.NoError(t, err)
 	assert.Equal(t, ipCache.ip, ip)
 
 	ipService.err = nil
-	ipService.ip, err = netip.ParseAddr("1.2.3.4")
-	require.NoError(t, err)
-	ip, err = h.getIP(r, false)
+	ipService.ip = newIP(t, "1.2.3.4")
+	ip, err = h.getIP(false)
 	assert.NoError(t, err)
 	assert.Equal(t, ipService.ip, ip)
 	assert.Equal(t, ipService.ip, ipCache.putIP)
-	assert.Equal(t, r, ran.putTime)
+}
+
+func newTime(t *testing.T, s string) time.Time {
+	n, err := time.Parse(time.RFC3339Nano, s)
+	require.NoError(t, err)
+	return n
+}
+
+func newIP(t *testing.T, s string) netip.Addr {
+	ip, err := netip.ParseAddr(s)
+	require.NoError(t, err)
+	return ip
 }

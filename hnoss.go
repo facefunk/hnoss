@@ -2,6 +2,7 @@ package hnoss
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"log/syslog"
@@ -87,7 +88,7 @@ func (h *Hnoss) Start(ctx context.Context) {
 	done := ctx.Done()
 	call := h.chatAdapter.Chan()
 
-	if _, err := h.getIP(zeroTime, true); err != nil {
+	if _, err := h.getIP(true); err != nil {
 		h.logger.Print(err)
 	}
 	if err := h.chatAdapter.Listen(); err != nil {
@@ -119,9 +120,6 @@ func (h *Hnoss) Start(ctx context.Context) {
 			stopTimer(timer)
 			return
 		}
-		// Throttle. We're using RFC3339 dates that have a max precision of 1 second, so waiting for 1 second will
-		// ensure we don't run twice for the same time.
-		time.Sleep(time.Second)
 	}
 }
 
@@ -138,7 +136,15 @@ func stopTimer(timer *time.Timer) {
 
 // Get the ip address and post it, if necessary.
 func (h *Hnoss) run(t time.Time, cached bool, chanID string) {
-	var err error
+
+	// Record run after.
+	defer func() {
+		h.ran = t
+		if err := h.ranAdapter.Put(t); err != nil {
+			h.logger.Print(err)
+		}
+	}()
+
 	// Call Listen again each run to make sure we're connected.
 	if err := h.chatAdapter.Listen(); err != nil {
 		var w *Warn
@@ -150,8 +156,9 @@ func (h *Hnoss) run(t time.Time, cached bool, chanID string) {
 			}
 		}
 	}
+
 	cur := h.ip
-	ip, err := h.getIP(t, cached)
+	ip, err := h.getIP(cached)
 	if err != nil {
 		h.logger.Print(err)
 		return
@@ -222,7 +229,7 @@ func (h *Hnoss) getRan() (time.Time, error) {
 	return h.ran, nil
 }
 
-func (h *Hnoss) getIP(t time.Time, cached bool) (netip.Addr, error) {
+func (h *Hnoss) getIP(cached bool) (netip.Addr, error) {
 	if !cached {
 		ip, err := h.ipServiceAdapter.Get()
 		if err != nil {
@@ -230,10 +237,6 @@ func (h *Hnoss) getIP(t time.Time, cached bool) (netip.Addr, error) {
 		}
 		h.ip = ip
 		if err = h.ipCacheAdapter.Put(ip); err != nil {
-			h.logger.Print(err)
-		}
-		h.ran = t
-		if err = h.ranAdapter.Put(t); err != nil {
 			h.logger.Print(err)
 		}
 	} else if !h.ip.IsValid() {
