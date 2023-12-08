@@ -99,6 +99,7 @@ func (h *Hnoss) Start(ctx context.Context) {
 		next, runNow, wasAdvanced = h.next(now, h.config.Offset, h.config.Interval)
 
 		if runNow {
+			h.logger.Print(NewInfo("scheduled run missed, running now"))
 			h.run(now, false, "")
 		}
 		stopTimer(timer)
@@ -139,8 +140,15 @@ func stopTimer(timer *time.Timer) {
 func (h *Hnoss) run(t time.Time, cached bool, chanID string) {
 	var err error
 	// Call Listen again each run to make sure we're connected.
-	if err = h.chatAdapter.Listen(); err != nil {
-		h.logger.Print(err)
+	if err := h.chatAdapter.Listen(); err != nil {
+		var w *Warn
+		if !errors.As(err, &w) {
+			h.logger.Print(err)
+			var e *Error
+			if errors.As(err, &e) {
+				return
+			}
+		}
 	}
 	cur := h.ip
 	ip, err := h.getIP(t, cached)

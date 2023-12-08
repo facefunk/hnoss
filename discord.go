@@ -37,12 +37,12 @@ func (d *DiscordChatAdapter) Listen() error {
 	err := d.session.Open()
 	switch err {
 	case discordgo.ErrWSAlreadyOpen:
-		return nil
+		return WarnWrap(err, "Discord already connected")
 	case nil:
 		// wait for Discord ready event before returning.
 		d.wg.Add(1)
 		d.wg.Wait()
-		return nil
+		return NewInfo("connected to Discord")
 	default:
 		return ErrorWrap(err, "failed to open Discord session")
 	}
