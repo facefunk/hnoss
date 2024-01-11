@@ -2,7 +2,6 @@ package hnoss
 
 import (
 	"context"
-	"log"
 	"net/netip"
 	"strconv"
 	"sync"
@@ -93,7 +92,8 @@ var nextRunTimeTestCases = []struct {
 }
 
 func TestNext(t *testing.T) {
-	logger := log.Default()
+	logger, err := NewLogger("")
+	require.NoError(t, err)
 	r, err := time.Parse(time.RFC3339, "2023-11-28T13:05:00Z")
 	require.NoError(t, err)
 	ran := &mockTimeAdaptor{time: r}
@@ -126,7 +126,8 @@ func TestScheduler(t *testing.T) {
 	require.NoError(t, err)
 	conf.Offset = time.Now().UTC()
 
-	logger := log.Default()
+	logger, err := NewLogger("")
+	require.NoError(t, err)
 	wg := &sync.WaitGroup{}
 	ran := &mockTimeAdaptor{
 		time: conf.Offset,
@@ -225,13 +226,13 @@ func TestLock(t *testing.T) {
 }
 
 func TestNewLogger(t *testing.T) {
-	_, _, err := NewLogger("")
+	_, err := NewLogger("")
 	assert.NoError(t, err)
-	_, _, err = NewLogger("syslog")
+	_, err = NewLogger("syslog")
 	assert.NoError(t, err)
-	_, closeLogFile, err := NewLogger("run/log")
+	l, err := NewLogger("run/log")
 	assert.NoError(t, err)
-	err = closeLogFile()
+	err = l.Close()
 	assert.NoError(t, err)
 }
 

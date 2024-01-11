@@ -4,10 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
-	"log/syslog"
 	"net/netip"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -18,7 +15,7 @@ type (
 	// Hnoss is the main application object, configurable by dependency injection.
 	Hnoss struct {
 		config           *Config
-		logger           Printer
+		logger           *Logger
 		ranAdapter       TimeAdapter
 		ipServiceAdapter IPServiceAdapter
 		ipCacheAdapter   IPAdapter
@@ -55,16 +52,12 @@ type (
 	NowAdapter interface {
 		Now() time.Time
 	}
-	// Printer should log via the Print method.
-	Printer interface {
-		Print(v ...any)
-	}
 )
 
 var maxTime = time.Unix(1<<63-62135596801, 999999999)
 var zeroTime = time.Time{}
 
-func New(conf *Config, logger Printer, ranAdapter TimeAdapter, ipServiceAdapter IPServiceAdapter,
+func New(conf *Config, logger *Logger, ranAdapter TimeAdapter, ipServiceAdapter IPServiceAdapter,
 	ipCacheAdapter IPAdapter, chatAdapter ChatAdapter, nowAdapter NowAdapter) *Hnoss {
 	h := &Hnoss{
 		config:           conf,
@@ -80,7 +73,7 @@ func New(conf *Config, logger Printer, ranAdapter TimeAdapter, ipServiceAdapter 
 
 // Start starts the scheduler.
 func (h *Hnoss) Start(ctx context.Context) {
-	h.logger.Print(NewInfo("scheduler started"))
+	h.logger.Log(NewInfo("scheduler started"))
 
 	var now, next time.Time
 	var runNow, wasAdvanced bool
@@ -89,10 +82,10 @@ func (h *Hnoss) Start(ctx context.Context) {
 	call := h.chatAdapter.Chan()
 
 	if _, err := h.getIP(true); err != nil {
-		h.logger.Print(err)
+		h.logger.Log(err)
 	}
 	if err := h.chatAdapter.Listen(); err != nil {
-		h.logger.Print(err)
+		h.logger.Log(err)
 	}
 
 	for {
@@ -100,7 +93,7 @@ func (h *Hnoss) Start(ctx context.Context) {
 		next, runNow, wasAdvanced = h.next(now, h.config.Offset, h.config.Interval)
 
 		if runNow {
-			h.logger.Print(NewInfo("scheduled run missed, running now"))
+			h.logger.Log(NewInfo("scheduled run missed, running now"))
 			h.run(now, false, "")
 		}
 		stopTimer(timer)
@@ -113,9 +106,9 @@ func (h *Hnoss) Start(ctx context.Context) {
 			now = time.Now().UTC()
 			h.run(now, wasAdvanced, chanID)
 		case <-done:
-			h.logger.Print(NewInfo("exiting scheduler"))
+			h.logger.Log(NewInfo("exiting scheduler"))
 			if err := h.chatAdapter.Close(); err != nil {
-				h.logger.Print(err)
+				h.logger.Log(err)
 			}
 			stopTimer(timer)
 			return
@@ -141,7 +134,7 @@ func (h *Hnoss) run(t time.Time, cached bool, chanID string) {
 	defer func() {
 		h.ran = t
 		if err := h.ranAdapter.Put(t); err != nil {
-			h.logger.Print(err)
+			h.logger.Log(err)
 		}
 	}()
 
@@ -149,7 +142,7 @@ func (h *Hnoss) run(t time.Time, cached bool, chanID string) {
 	if err := h.chatAdapter.Listen(); err != nil {
 		var w *Warn
 		if !errors.As(err, &w) {
-			h.logger.Print(err)
+			h.logger.Log(err)
 			var e *Error
 			if errors.As(err, &e) {
 				return
@@ -160,26 +153,26 @@ func (h *Hnoss) run(t time.Time, cached bool, chanID string) {
 	cur := h.ip
 	ip, err := h.getIP(cached)
 	if err != nil {
-		h.logger.Print(err)
+		h.logger.Log(err)
 		return
 	}
 
 	post := false
 	if chanID != "" {
-		h.logger.Print(Infof("replying to message on channel %s", chanID))
+		h.logger.Log(Infof("replying to message on channel %s", chanID))
 		post = true
 	}
 	if cur != ip {
-		h.logger.Print(Infof("ip address changed from %s to %s", cur.String(), ip.String()))
+		h.logger.Log(Infof("ip address changed from %s to %s", cur.String(), ip.String()))
 		post = true
 	}
 	if post {
 		if err = h.chatAdapter.Post(chanID, fmt.Sprintf(h.config.IPMessageFormat, ip.String())); err != nil {
-			h.logger.Print(err)
+			h.logger.Log(err)
 		}
 		return
 	}
-	h.logger.Print(NewInfo("ip address unchanged"))
+	h.logger.Log(NewInfo("ip address unchanged"))
 }
 
 // Get the next run time.
@@ -199,7 +192,7 @@ func (h *Hnoss) next(now, offset time.Time, interval time.Duration) (
 	// If ran can't be found, or if ran is before expected, run now.
 	prev, err := h.getRan()
 	if err != nil {
-		h.logger.Print(err)
+		h.logger.Log(err)
 		runNow = true
 		return
 	}
@@ -237,7 +230,7 @@ func (h *Hnoss) getIP(cached bool) (netip.Addr, error) {
 		}
 		h.ip = ip
 		if err = h.ipCacheAdapter.Put(ip); err != nil {
-			h.logger.Print(err)
+			h.logger.Log(err)
 		}
 	} else if !h.ip.IsValid() {
 		var err error
@@ -271,33 +264,6 @@ func Lock(pidFile string) (func() error, error) {
 		}
 		return nil
 	}, nil
-}
-
-func NewLogger(path string) (Printer, func() error, error) {
-	switch path {
-	case "":
-		return log.Default(), nil, nil
-	case "syslog":
-		logger, err := syslog.NewLogger(syslog.LOG_SYSLOG, log.LstdFlags)
-		if err != nil {
-			return nil, nil, FatalWrap(err, "failed to create syslog logger")
-		}
-		return logger, nil, nil
-	default:
-		err := mkDir(path, "log")
-		if err != nil {
-			return nil, nil, (*Fatal)(err.(*Error))
-		}
-		file, err := os.OpenFile(path, os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
-		if err != nil {
-			return nil, nil, FatalWrap(err, "failed to open log file")
-		}
-		closeFile := closeFileFunc(path, "log", &err, file)
-		return log.New(file, "", log.LstdFlags), func() error {
-			closeFile()
-			return err
-		}, nil
-	}
 }
 
 func PanicOnError(f func() error) {

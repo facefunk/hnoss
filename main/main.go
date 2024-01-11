@@ -28,11 +28,11 @@ func main() {
 	}
 	defer hnoss.PanicOnError(unlock)
 
-	logger, closeLogFile, err := hnoss.NewLogger(conf.LogFile)
+	logger, err := hnoss.NewLogger(conf.LogFile)
 	if err != nil {
 		panic(err)
 	}
-	defer hnoss.PanicOnError(closeLogFile)
+	defer hnoss.PanicOnError(logger.Close)
 
 	// stop does cancel, but also deconstructs.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
