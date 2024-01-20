@@ -85,10 +85,18 @@ func TestPlainTextIPServiceAdapter(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, ip, ip2)
 
+	m = NewPlainTextIPServiceAdapter("testdata/badip")
+	ip2, err = m.Get()
+	assert.Error(t, err)
+
 	m = NewPlainTextIPServiceAdapter(HTTPAddress + "ip")
 	ip2, err = m.Get()
 	assert.NoError(t, err)
 	assert.Equal(t, ip, ip2)
+
+	m = NewPlainTextIPServiceAdapter(HTTPAddress + "badip")
+	ip2, err = m.Get()
+	assert.Error(t, err)
 
 	shutdown(server)
 }

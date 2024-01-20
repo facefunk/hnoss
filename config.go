@@ -119,19 +119,27 @@ func ConfigureFromReadSeeker(reader io.ReadSeeker) (*Config, error) {
 }
 
 func openFile(path, desc string, err *error) (file *os.File, closeFile func()) {
-	file, *err = os.Open(path)
-	if *err != nil {
-		*err = ErrorWrapf(*err, "failed to open %s file: %s", desc, path)
+	file, fErr := os.Open(path)
+	if fErr != nil {
+		fErr = ErrorWrapf(*err, "failed to open %s file: %s", desc, path)
+		multiError(err, fErr)
+		return
 	}
 	closeFile = closeFileFunc(path, desc, err, file)
 	return
 }
 
 func createFile(path, desc string, err *error) (file *os.File, closeFile func()) {
-	*err = mkDir(path, desc)
-	file, *err = os.Create(path)
-	if *err != nil {
-		*err = ErrorWrapf(*err, "failed to create %s file: %s", desc, path)
+	fErr := mkDir(path, desc)
+	if fErr != nil {
+		multiError(err, fErr)
+		return
+	}
+	file, fErr = os.Create(path)
+	if fErr != nil {
+		fErr = ErrorWrapf(fErr, "failed to create %s file: %s", desc, path)
+		multiError(err, fErr)
+		return
 	}
 	closeFile = closeFileFunc(path, desc, err, file)
 	return
@@ -144,7 +152,7 @@ func mkDir(path, desc string) error {
 	return nil
 }
 
-func closeFileFunc(path, desc string, err *error, file *os.File) func() {
+func closeFileFunc(path, desc string, err *error, file io.Closer) func() {
 	return func() {
 		if fErr := file.Close(); fErr != nil {
 			fErr = ErrorWrapf(fErr, "failed to close %s file: %s", desc, path)

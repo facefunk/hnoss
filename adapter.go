@@ -76,7 +76,7 @@ func (m *TextFileIPAdapter) Get() (ip netip.Addr, err error) {
 		return
 	}
 	defer closeFile()
-	return readIP(file)
+	return readIP(file, "cache file")
 }
 
 func (m *TextFileIPAdapter) Put(ip netip.Addr) (err error) {
@@ -86,7 +86,7 @@ func (m *TextFileIPAdapter) Put(ip netip.Addr) (err error) {
 	}
 	_, err = file.WriteString(ip.String())
 	if err != nil {
-		err = ErrorWrap(err, "failed to write to IP file")
+		err = ErrorWrap(err, "failed to write to IP cache file")
 	}
 	closeFile()
 	return
@@ -104,22 +104,22 @@ func (m *PlainTextIPServiceAdapter) Get() (ip netip.Addr, err error) {
 		return
 	}
 	defer closeFile()
-	return readIP(file)
+	return readIP(file, "service")
 }
 
-func readIP(file io.Reader) (ip netip.Addr, err error) {
+func readIP(file io.Reader, desc string) (ip netip.Addr, err error) {
 	b := make([]byte, 39)
 	var n int
 	if n, err = file.Read(b); err != nil {
 		if err != io.EOF || n == 0 {
-			err = ErrorWrap(err, "failed to read from IP file")
+			err = ErrorWrapf(err, "failed to read from IP %s", desc)
 			return
 		}
 	}
 	s := trim(b)
 	ip, err = netip.ParseAddr(s)
 	if err != nil {
-		err = ErrorWrapf(err, "failed to parse IP address: %s", s)
+		err = ErrorWrapf(err, "failed to parse IP address from %s: %s", desc, s)
 	}
 	return
 }
@@ -139,9 +139,8 @@ func trim(b []byte) string {
 
 // fetch first tries to interpret path as a URL, then as a file path.
 func fetch(path, desc string, err *error) (io.ReadCloser, func()) {
-	var uri *url.URL
-	uri, *err = url.ParseRequestURI(path)
-	if *err != nil {
+	uri, fErr := url.ParseRequestURI(path)
+	if fErr != nil {
 		return openFile(path, desc, err)
 	}
 	if uri.Scheme == "file" {
@@ -155,9 +154,5 @@ func fetch(path, desc string, err *error) (io.ReadCloser, func()) {
 		return nil, nil
 	}
 	file := res.Body
-	return file, func() {
-		if *err = file.Close(); *err != nil {
-			*err = ErrorWrapf(*err, "failed to close %s URL: %s", desc, path)
-		}
-	}
+	return file, closeFileFunc(path, desc, err, file)
 }

@@ -225,7 +225,7 @@ func (h *Hnoss) getRan() (time.Time, error) {
 func (h *Hnoss) getIP(cached bool) (netip.Addr, error) {
 	if !cached {
 		ip, err := h.ipServiceAdapter.Get()
-		if err != nil {
+		if err != nil || !ip.IsValid() {
 			return h.ip, err
 		}
 		h.ip = ip
